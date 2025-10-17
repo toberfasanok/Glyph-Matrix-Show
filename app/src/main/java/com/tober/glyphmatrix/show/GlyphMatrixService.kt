@@ -51,6 +51,12 @@ class GlyphMatrixService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == Constants.ACTION_ON_SCREEN_OFF) {
+            clearRunnable?.let { mainHandler.removeCallbacks(it) }
+            clearRunnable = null
+
+            animationRunnable?.let { mainHandler.removeCallbacks(it) }
+            animationRunnable = null
+
             glyphMatrixManager?.closeAppMatrix()
         }
         else {
