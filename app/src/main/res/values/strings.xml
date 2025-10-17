@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Glyph Matrix Show</string>
+
+    <string name="accessibility_service_label">Unlock Accessibility Service</string>
+    <string name="accessibility_service_description">
+        This accessibility service lets the app detect when the screen turns on so it can
+        perform a short background action when you open the phone. The service does not
+        read personal content. it only observes system window changes and screen state.
+    </string>
+
+    <string name="accessibility_disclosure_title">Accessibility access required</string>
+    <string name="accessibility_disclosure_body">This accessibility service needs accessibility access so it can detect when you open the phone and perform a short background action. The service only observes system window and screen state events — it does not read or transmit your notifications, messages, keystrokes, or other personal content. You can disable this at any time in Settings → Accessibility.</string>
+    <string name="accessibility_disclosure_open_settings">Open Accessibility Settings</string>
+</resources>
