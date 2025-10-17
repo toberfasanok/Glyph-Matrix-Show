@@ -54,6 +54,15 @@ class UnlockAccessibilityService : AccessibilityService() {
             }, 120L)
         }
 
+        if (screenOn && !currentlyInteractive) {
+            mainHandler.postDelayed({
+                if (!isScreenInteractive()) {
+                    Log.i(tag, "onScreenOff")
+                    onScreenOff()
+                }
+            }, 120L)
+        }
+
         screenOn = currentlyInteractive
     }
 
@@ -66,6 +75,13 @@ class UnlockAccessibilityService : AccessibilityService() {
 
     private fun onScreenOn() {
         val intent = Intent(this, GlyphMatrixService::class.java)
+        startService(intent)
+    }
+
+    private fun onScreenOff() {
+        val intent = Intent(this, GlyphMatrixService::class.java).apply {
+            action = Constants.ACTION_ON_SCREEN_OFF
+        }
         startService(intent)
     }
 }

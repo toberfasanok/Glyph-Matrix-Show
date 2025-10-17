@@ -50,11 +50,14 @@ class GlyphMatrixService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        try {
+        if (intent?.action == Constants.ACTION_ON_SCREEN_OFF) {
+            glyphMatrixManager?.closeAppMatrix()
+        }
+        else {
             val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
 
             val active = preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)
-            if (!active) return START_NOT_STICKY
+            if (!active) return START_REDELIVER_INTENT
 
             clearRunnable?.let { mainHandler.removeCallbacks(it) }
             clearRunnable = null
@@ -62,13 +65,13 @@ class GlyphMatrixService : Service() {
             animationRunnable?.let { mainHandler.removeCallbacks(it) }
             animationRunnable = null
 
+            glyphMatrixManager?.closeAppMatrix()
+
             if (initialized) onGlyph()
             else onInit()
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to start service: $e")
         }
 
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onDestroy() {

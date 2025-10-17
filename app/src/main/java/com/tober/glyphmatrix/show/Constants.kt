@@ -13,5 +13,6 @@ object Constants {
 
     const val GLYPH_GLYPH = "glyph"
 
+    const val ACTION_ON_SCREEN_OFF = "com.tober.glyphmatrix.show.ACTION_ON_SCREEN_OFF"
     const val ACTION_ON_PREFERENCES_UPDATE = "com.tober.glyphmatrix.show.ACTION_ON_PREFERENCES_UPDATE"
 }
