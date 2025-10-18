@@ -30,16 +30,17 @@ class GlyphMatrixService : Service() {
 
     private var glyphMatrixManager: GlyphMatrixManager? = null
     private var glyphMatrixManagerCallback: GlyphMatrixManager.Callback? = null
-    private var initialized = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var clearRunnable: Runnable? = null
-
     private var animationRunnable: Runnable? = null
 
+    private var initialized = false
+    private var glyph: Bitmap? = null
     private val matrixSize = 25
     private val cx = (matrixSize - 1) / 2.0
     private val cy = (matrixSize - 1) / 2.0
+    private val maxRadius = ceil(sqrt(cx * cx + cy * cy)).toInt()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -50,21 +51,37 @@ class GlyphMatrixService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
+
+        val active = preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)
+        if (!active) return START_REDELIVER_INTENT
+
         if (intent?.action == Constants.ACTION_ON_SCREEN_OFF) {
-            clearRunnable?.let { mainHandler.removeCallbacks(it) }
-            clearRunnable = null
+            if (glyph !== null) {
+                clearRunnable?.let { mainHandler.removeCallbacks(it) }
+                clearRunnable = null
+    
+                animationRunnable?.let { mainHandler.removeCallbacks(it) }
+                animationRunnable = null
 
-            animationRunnable?.let { mainHandler.removeCallbacks(it) }
-            animationRunnable = null
+                val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
+                val speed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).coerceAtLeast(1L)
 
-            glyphMatrixManager?.closeAppMatrix()
+                fun clear() {
+                    try {
+                        glyph = null
+                        glyphMatrixManager?.closeAppMatrix()
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to close glyph matrix: $e")
+                    }
+                }
+
+                glyph?.let { g ->
+                    hideAnimated(g, speed / 3L, ::clear)
+                }
+            }
         }
         else {
-            val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
-
-            val active = preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)
-            if (!active) return START_REDELIVER_INTENT
-
             clearRunnable?.let { mainHandler.removeCallbacks(it) }
             clearRunnable = null
 
@@ -123,7 +140,6 @@ class GlyphMatrixService : Service() {
         Log.d(tag, "onGlyph")
 
         val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
-        var glyph: Bitmap? = null
 
         val glyphs = preferences.getString(Constants.PREFERENCES_GLYPHS, null)
         if (!glyphs.isNullOrBlank()) {
@@ -139,16 +155,29 @@ class GlyphMatrixService : Service() {
 
         val timeout = preferences.getLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L).coerceAtLeast(1L) * 1000L
 
+        fun clear() {
+            try {
+                glyph = null
+                glyphMatrixManager?.closeAppMatrix()
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to close glyph matrix: $e")
+            }
+        }
+
         if (preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)) {
             val speed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).coerceAtLeast(1L)
 
-            showAnimated(glyph, timeout, speed)
+            glyph?.let { g ->
+                showAnimated(g, timeout, speed, ::clear)
+            }
         } else {
-            showSimple(glyph, timeout)
+            glyph?.let { g ->
+                showSimple(g, timeout, ::clear)
+            }
         }
     }
 
-    private fun showSimple(glyph: Bitmap, timeout: Long) {
+    private fun showSimple(glyph: Bitmap, timeout: Long, operation: () -> Unit) {
         try {
             val objBuilder = GlyphMatrixObject.Builder()
             val image = objBuilder
@@ -169,22 +198,16 @@ class GlyphMatrixService : Service() {
         }
 
         val runnable = Runnable {
-            try {
-                glyphMatrixManager?.closeAppMatrix()
-            } catch (e: Exception) {
-                Log.e(tag, "Failed to stop glyph: $e")
-            } finally {
-                clearRunnable = null
-            }
+            operation()
+            clearRunnable = null
         }
 
         clearRunnable = runnable
         mainHandler.postDelayed(runnable, timeout)
     }
 
-    private fun showAnimated(glyph: Bitmap, timeout: Long, speed: Long) {
+    private fun showAnimated(glyph: Bitmap, timeout: Long, speed: Long, operation: () -> Unit) {
         val src = glyph.scale(matrixSize, matrixSize)
-        val maxRadius = ceil(sqrt(cx * cx + cy * cy)).toInt()
 
         var radius = 0
 
@@ -217,7 +240,7 @@ class GlyphMatrixService : Service() {
                     animationRunnable = null
 
                     val runnable = Runnable {
-                        hideAnimated(glyph, speed)
+                        hideAnimated(glyph, speed, operation)
                     }
 
                     clearRunnable = runnable
@@ -230,13 +253,13 @@ class GlyphMatrixService : Service() {
         mainHandler.post(runnable)
     }
 
-    private fun hideAnimated(glyph: Bitmap, speed: Long) {
+    private fun hideAnimated(glyph: Bitmap, speed: Long, operation: () -> Unit) {
         clearRunnable = null
 
         val src = glyph.scale(matrixSize, matrixSize)
-        val maxRadius = ceil(sqrt(cx * cx + cy * cy)).toInt()
 
         var radius = maxRadius
+
         val runnable = object : Runnable {
             override fun run() {
                 if (radius >= 0) {
@@ -264,12 +287,7 @@ class GlyphMatrixService : Service() {
                     mainHandler.postDelayed(this, speed)
                 } else {
                     animationRunnable = null
-
-                    try {
-                        glyphMatrixManager?.closeAppMatrix()
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to stop glyph: $e")
-                    }
+                    operation()
                 }
             }
         }

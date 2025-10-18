@@ -31,9 +31,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -156,7 +162,7 @@ class MainActivity : ComponentActivity() {
                                 Spacer(modifier = Modifier.height(25.dp))
 
                                 Text(text = "1. Allow Restricted Settings:", fontWeight = FontWeight.Bold)
-                                Text(text = "App info -> ⋮ (top right) -> Allow Restricted Settings")
+                                Text(text = "App Info -> ⋮ (top right) -> Allow Restricted Settings")
 
                                 Button(
                                     onClick = {
@@ -232,28 +238,28 @@ class MainActivity : ComponentActivity() {
                                         val filtered = value.filter { it.isDigit() }
                                         savedGlyphTimeout = filtered
                                     },
-                                    label = { Text("Timeout (seconds)") },
+                                    label = { Text("(seconds)") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier = Modifier.padding(top = 12.dp)
                                 )
 
                                 Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = {
+                                    IconButton(onClick = {
                                         val timeout = savedGlyphTimeout.toLongOrNull() ?: 5L
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, timeout) }
                                         broadcastPreferencesUpdate()
                                         toast("Timeout saved")
                                     }) {
-                                        Text(text = "Save")
+                                        Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
                                     }
 
-                                    Button(onClick = {
+                                    IconButton(onClick = {
                                         savedGlyphTimeout = "5"
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L) }
                                         broadcastPreferencesUpdate()
                                         toast("Timeout reset")
                                     }) {
-                                        Text(text = "Reset")
+                                        Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Reset")
                                     }
                                 }
 
@@ -291,7 +297,7 @@ class MainActivity : ComponentActivity() {
                                 if (animateGlyphs) {
                                     Spacer(modifier = Modifier.height(15.dp))
 
-                                    Text(text = "Animate Speed", modifier = Modifier.padding(bottom = 8.dp))
+                                    Text(text = "Animation Speed", modifier = Modifier.padding(bottom = 8.dp))
 
                                     var savedAnimateSpeed by rememberSaveable { mutableStateOf(preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).toString()) }
 
@@ -301,28 +307,28 @@ class MainActivity : ComponentActivity() {
                                             val filtered = value.filter { it.isDigit() }
                                             savedAnimateSpeed = filtered
                                         },
-                                        label = { Text("Speed (milliseconds)") },
+                                        label = { Text("(milliseconds)") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.padding(top = 12.dp)
                                     )
 
                                     Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick = {
+                                        IconButton(onClick = {
                                             val animateSpeed = savedAnimateSpeed.toLongOrNull() ?: 10L
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, animateSpeed) }
                                             broadcastPreferencesUpdate()
-                                            toast("Animate speed saved")
+                                            toast("Animation speed saved")
                                         }) {
-                                            Text(text = "Save")
+                                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
                                         }
 
-                                        Button(onClick = {
+                                        IconButton(onClick = {
                                             savedAnimateSpeed = "10"
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L) }
                                             broadcastPreferencesUpdate()
-                                            toast("Animate speed reset")
+                                            toast("Animation speed reset")
                                         }) {
-                                            Text(text = "Reset")
+                                            Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Reset")
                                         }
                                     }
                                 }
@@ -333,7 +339,7 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Column(modifier = Modifier.padding(8.dp)) {
-                                Text(text = "Glyphs", modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+                                Text(text = "Glyphs", modifier = Modifier.padding(vertical = 8.dp))
 
                                 Card(
                                     modifier = Modifier
@@ -374,10 +380,10 @@ class MainActivity : ComponentActivity() {
                                             }
                                         }
 
-                                        Button(onClick = {
+                                        IconButton(onClick = {
                                             if (newGlyph.isBlank()) {
                                                 toast("Choose a glyph")
-                                                return@Button
+                                                return@IconButton
                                             }
 
                                             val dest = File(filesDir, "glyph_${System.currentTimeMillis()}.png")
@@ -387,7 +393,7 @@ class MainActivity : ComponentActivity() {
                                             } catch (e: Exception) {
                                                 Log.e(tag, "Failed to save glyph: $e")
                                                 toast("Failed to save glyph")
-                                                return@Button
+                                                return@IconButton
                                             }
 
                                             glyphs.add(Glyph(dest.absolutePath))
@@ -396,7 +402,7 @@ class MainActivity : ComponentActivity() {
                                             newGlyph = ""
                                             toast("Glyph saved")
                                         }) {
-                                            Text(text = "+")
+                                            Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
                                         }
                                     }
                                 }
@@ -429,12 +435,12 @@ class MainActivity : ComponentActivity() {
                                                 Spacer(modifier = Modifier.size(56.dp))
                                             }
 
-                                            Button(onClick = {
+                                            IconButton(onClick = {
                                                 glyphs.remove(item)
                                                 writeGlyphMappings(glyphs)
                                                 toast("Glyph removed")
                                             }) {
-                                                Text(text = "-")
+                                                Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete")
                                             }
                                         }
                                     }
@@ -449,7 +455,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        updateAccessibilityServiceAccessState()
+        updateAccessibilityServiceAccess()
     }
 
     override fun onDestroy() {
@@ -476,7 +482,7 @@ class MainActivity : ComponentActivity() {
         return false
     }
 
-    private fun updateAccessibilityServiceAccessState() {
+    private fun updateAccessibilityServiceAccess() {
         hasAccessibilityServiceAccess = getAccessibilityServiceAccess()
     }
 
