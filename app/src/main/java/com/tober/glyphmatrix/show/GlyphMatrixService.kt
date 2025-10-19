@@ -79,7 +79,7 @@ class GlyphMatrixService : Service() {
                     }
 
                     glyph?.let { g ->
-                        hideAnimated(g, speed / 3L, ::clear)
+                        hideAnimated(g, 10L, ::clear)
                     }
                 }
                 else {
