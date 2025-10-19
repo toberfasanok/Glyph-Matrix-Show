@@ -2,6 +2,7 @@ package com.tober.glyphmatrix.show
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -13,6 +14,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,12 +33,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,7 +54,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -58,6 +61,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,6 +84,20 @@ class MainActivity : ComponentActivity() {
 
     private var hasAccessibilityServiceAccess by mutableStateOf(false)
 
+    private lateinit var preferences: SharedPreferences
+
+    private var active by mutableStateOf(true)
+
+    private var glyphTimeout by mutableStateOf("5")
+    private var animateGlyphs by mutableStateOf(true)
+    private var animateSpeed by mutableStateOf("10")
+
+    private val glyphs = mutableStateListOf<Glyph>()
+    private var newGlyph by mutableStateOf("")
+
+    private var loadImageLauncherCallback: ((String) -> Unit)? = null
+    private lateinit var loadImageLauncher: ActivityResultLauncher<Array<String>>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -86,14 +105,17 @@ class MainActivity : ComponentActivity() {
 
         hasAccessibilityServiceAccess = getAccessibilityServiceAccess()
 
-        val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
+        preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
 
-        val glyphs = mutableStateListOf<Glyph>().apply { addAll(readGlyphMappings()) }
-        var newGlyph by mutableStateOf("")
+        active = preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)
 
-        val glyphsImageLauncher = registerForActivityResult(
-            ActivityResultContracts.OpenDocument()
-        ) { uri: Uri? ->
+        glyphTimeout = preferences.getLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L).toString()
+        animateGlyphs = preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)
+        animateSpeed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).toString()
+
+        glyphs.clear(); glyphs.addAll(readGlyphMappings())
+
+        loadImageLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri == null) {
                 return@registerForActivityResult
             }
@@ -103,9 +125,9 @@ class MainActivity : ComponentActivity() {
             } catch (_: Throwable) {}
 
             try {
-                val newFile = File(filesDir, "tmp_glyph_${System.currentTimeMillis()}.png")
+                val newFile = File(filesDir, "tmp_image_${System.currentTimeMillis()}.png")
 
-                filesDir.listFiles()?.filter { it.name.startsWith("tmp_glyph_") && it.name.endsWith(".png") && it.absolutePath != newFile.absolutePath }
+                filesDir.listFiles()?.filter { it.name.startsWith("tmp_image_") && it.name.endsWith(".png") && it.absolutePath != newFile.absolutePath }
                     ?.forEach { try { it.delete() } catch (_: Throwable) {} }
 
                 contentResolver.openInputStream(uri).use { inputStream ->
@@ -134,19 +156,25 @@ class MainActivity : ComponentActivity() {
 
                 if (width != height) {
                     toast("Image must be 1:1 (square)")
-                }
-                else {
-                    newGlyph = newFile.absolutePath
+                } else {
+                    try {
+                        loadImageLauncherCallback?.invoke(newFile.absolutePath)
+                    } finally {
+                        loadImageLauncherCallback = null
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(tag, "Failed to save tmp glyph: $e")
-                toast("Failed to save tmp glyph")
+                Log.e(tag, "Failed to load image: $e")
+                toast("Failed to load image")
             }
         }
 
         setContent {
             GlyphMatrixShowTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { paddingValues ->
+                    val focusManager = LocalFocusManager.current
+                    val keyboardController = LocalSoftwareKeyboardController.current
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -193,8 +221,6 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             Column(modifier = Modifier.padding(8.dp)) {
-                                var active by rememberSaveable { mutableStateOf(preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)) }
-
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -230,13 +256,11 @@ class MainActivity : ComponentActivity() {
                             Column(modifier = Modifier.padding(8.dp)) {
                                 Text(text = "Glyph Timeout", modifier = Modifier.padding(bottom = 8.dp))
 
-                                var savedGlyphTimeout by rememberSaveable { mutableStateOf(preferences.getLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L).toString()) }
-
                                 OutlinedTextField(
-                                    value = savedGlyphTimeout,
+                                    value = glyphTimeout,
                                     onValueChange = { value ->
                                         val filtered = value.filter { it.isDigit() }
-                                        savedGlyphTimeout = filtered
+                                        glyphTimeout = filtered
                                     },
                                     label = { Text("(seconds)") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -245,7 +269,7 @@ class MainActivity : ComponentActivity() {
 
                                 Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     IconButton(onClick = {
-                                        val timeout = savedGlyphTimeout.toLongOrNull() ?: 5L
+                                        val timeout = glyphTimeout.toLongOrNull() ?: 5L
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, timeout) }
                                         broadcastPreferencesUpdate()
                                         toast("Timeout saved")
@@ -254,7 +278,7 @@ class MainActivity : ComponentActivity() {
                                     }
 
                                     IconButton(onClick = {
-                                        savedGlyphTimeout = "5"
+                                        glyphTimeout = "5"
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L) }
                                         broadcastPreferencesUpdate()
                                         toast("Timeout reset")
@@ -264,8 +288,6 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 Spacer(modifier = Modifier.height(15.dp))
-
-                                var animateGlyphs by rememberSaveable { mutableStateOf(preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)) }
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -299,13 +321,11 @@ class MainActivity : ComponentActivity() {
 
                                     Text(text = "Animation Speed", modifier = Modifier.padding(bottom = 8.dp))
 
-                                    var savedAnimateSpeed by rememberSaveable { mutableStateOf(preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).toString()) }
-
                                     OutlinedTextField(
-                                        value = savedAnimateSpeed,
+                                        value = animateSpeed,
                                         onValueChange = { value ->
                                             val filtered = value.filter { it.isDigit() }
-                                            savedAnimateSpeed = filtered
+                                            animateSpeed = filtered
                                         },
                                         label = { Text("(milliseconds)") },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -314,7 +334,7 @@ class MainActivity : ComponentActivity() {
 
                                     Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         IconButton(onClick = {
-                                            val animateSpeed = savedAnimateSpeed.toLongOrNull() ?: 10L
+                                            val animateSpeed = animateSpeed.toLongOrNull() ?: 10L
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, animateSpeed) }
                                             broadcastPreferencesUpdate()
                                             toast("Animation speed saved")
@@ -323,7 +343,7 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         IconButton(onClick = {
-                                            savedAnimateSpeed = "10"
+                                            animateSpeed = "10"
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L) }
                                             broadcastPreferencesUpdate()
                                             toast("Animation speed reset")
@@ -354,18 +374,18 @@ class MainActivity : ComponentActivity() {
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        val tmpGlyph = remember(newGlyph) {
+                                        val tmp = remember(newGlyph) {
                                             newGlyph.takeIf { it.isNotBlank() }?.let { BitmapFactory.decodeFile(it) }
                                         }
 
-                                        if (tmpGlyph != null) {
+                                        if (tmp != null) {
                                             Image(
-                                                painter = BitmapPainter(tmpGlyph.asImageBitmap(), filterQuality = FilterQuality.None),
+                                                painter = BitmapPainter(tmp.asImageBitmap(), filterQuality = FilterQuality.None),
                                                 contentDescription = "Glyph Preview",
                                                 modifier = Modifier
                                                     .size(56.dp)
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .clickable { glyphsImageLauncher.launch(arrayOf("image/*")) }
+                                                    .clickable { loadGlyph() }
                                             )
                                         } else {
                                             Box(
@@ -373,35 +393,14 @@ class MainActivity : ComponentActivity() {
                                                     .size(56.dp)
                                                     .clip(RoundedCornerShape(8.dp))
                                                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                                                    .clickable { glyphsImageLauncher.launch(arrayOf("image/*")) },
+                                                    .clickable { loadGlyph() },
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(text = "+", style = MaterialTheme.typography.bodySmall)
                                             }
                                         }
 
-                                        IconButton(onClick = {
-                                            if (newGlyph.isBlank()) {
-                                                toast("Choose a glyph")
-                                                return@IconButton
-                                            }
-
-                                            val dest = File(filesDir, "glyph_${System.currentTimeMillis()}.png")
-
-                                            try {
-                                                File(newGlyph).copyTo(dest, overwrite = true)
-                                            } catch (e: Exception) {
-                                                Log.e(tag, "Failed to save glyph: $e")
-                                                toast("Failed to save glyph")
-                                                return@IconButton
-                                            }
-
-                                            glyphs.add(Glyph(dest.absolutePath))
-                                            writeGlyphMappings(glyphs)
-
-                                            newGlyph = ""
-                                            toast("Glyph saved")
-                                        }) {
+                                        IconButton(onClick = { createGlyph() }) {
                                             Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
                                         }
                                     }
@@ -421,26 +420,39 @@ class MainActivity : ComponentActivity() {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            val savedGlyph = remember(item.glyph) {
-                                                try { BitmapFactory.decodeFile(item.glyph) } catch (_: Throwable) { null }
+                                            val tmp = remember(item.glyph) {
+                                                item.glyph.takeIf { it.isNotBlank() }?.let { BitmapFactory.decodeFile(it) }
                                             }
 
-                                            if (savedGlyph != null) {
+                                            if (tmp != null) {
                                                 Image(
-                                                    painter = BitmapPainter(savedGlyph.asImageBitmap(), filterQuality = FilterQuality.None),
+                                                    painter = BitmapPainter(tmp.asImageBitmap(), filterQuality = FilterQuality.None),
                                                     contentDescription = null,
-                                                    modifier = Modifier.size(56.dp)
+                                                    modifier = Modifier
+                                                        .size(56.dp)
+                                                        .clickable { updateGlyph(item) }
                                                 )
                                             } else {
                                                 Spacer(modifier = Modifier.size(56.dp))
                                             }
 
-                                            IconButton(onClick = {
-                                                glyphs.remove(item)
-                                                writeGlyphMappings(glyphs)
-                                                toast("Glyph removed")
-                                            }) {
-                                                Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete")
+                                            var expanded by remember { mutableStateOf(false) }
+
+                                            Box {
+                                                IconButton(onClick = {
+                                                    focusManager.clearFocus(force = true)
+                                                    keyboardController?.hide()
+
+                                                    expanded = true
+                                                }) {
+                                                    Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                                                }
+
+                                                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                                                    DropdownMenuItem(text = { Text("Move Up") }, onClick = { changeOrder(item, -1); expanded = false })
+                                                    DropdownMenuItem(text = { Text("Move Down") }, onClick = { changeOrder(item, 1); expanded = false })
+                                                    DropdownMenuItem(text = { Text("Delete") }, onClick = { deleteGlyph(item); expanded = false })
+                                                }
                                             }
                                         }
                                     }
@@ -518,7 +530,7 @@ class MainActivity : ComponentActivity() {
         val arr = JSONArray(raw)
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
-            val glyph = obj.optString(Constants.GLYPH_GLYPH)
+            val glyph = obj.optString("glyph")
 
             list.add(Glyph(glyph))
         }
@@ -531,7 +543,7 @@ class MainActivity : ComponentActivity() {
 
         for ((glyph) in list) {
             val obj = JSONObject()
-            obj.put(Constants.GLYPH_GLYPH, glyph)
+            obj.put("glyph", glyph)
             arr.put(obj)
         }
 
@@ -543,5 +555,95 @@ class MainActivity : ComponentActivity() {
 
     private fun toast(message: String) {
         Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun loadGlyph() {
+        loadImageLauncherCallback = fun(loaded: String) {
+            val newFile = File(filesDir, "tmp_glyph_${System.currentTimeMillis()}.png")
+            try {
+                File(loaded).copyTo(newFile, overwrite = true)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to update glyph: $e")
+                toast("Failed to update glyph")
+                return
+            }
+
+            filesDir.listFiles()?.filter { it.name.startsWith("tmp_glyph_") && it.name.endsWith(".png") && it.absolutePath != newFile.absolutePath }
+                ?.forEach { try { it.delete() } catch (_: Throwable) {} }
+
+            newGlyph = newFile.absolutePath
+        }
+
+        loadImageLauncher.launch(arrayOf("image/*"))
+    }
+
+    private fun createGlyph() {
+        if (newGlyph.isBlank()) {
+            toast("Choose a glyph")
+            return
+        }
+
+        val newFile = File(filesDir, "glyph_${System.currentTimeMillis()}.png")
+        try {
+            File(newGlyph).copyTo(newFile, overwrite = true)
+        } catch (e: Exception) {
+            newGlyph = ""
+
+            Log.e(tag, "Failed to save glyph: $e")
+            toast("Failed to save glyph")
+            return
+        }
+
+        glyphs.add(Glyph(newFile.absolutePath))
+        writeGlyphMappings(glyphs)
+
+        newGlyph = ""
+        toast("Glyph saved")
+    }
+
+    private fun updateGlyph(item: Glyph) {
+        loadImageLauncherCallback = fun(loaded: String) {
+            val newFile = File(filesDir, "glyph_${System.currentTimeMillis()}.png")
+            try {
+                File(loaded).copyTo(newFile, overwrite = true)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to update glyph: $e")
+                toast("Failed to update glyph")
+                return
+            }
+
+            val i = glyphs.indexOfFirst { it.glyph == item.glyph }
+            if (i != -1) {
+                glyphs[i] = Glyph(newFile.absolutePath)
+                writeGlyphMappings(glyphs)
+            }
+
+            try { File(item.glyph).delete() } catch (_: Throwable) {}
+
+            toast("Glyph updated")
+        }
+
+        loadImageLauncher.launch(arrayOf("image/*"))
+    }
+
+    private fun deleteGlyph(item: Glyph) {
+        glyphs.remove(item)
+        writeGlyphMappings(glyphs)
+        toast("Glyph removed")
+    }
+
+    private fun changeOrder(item: Glyph, n: Int) {
+        val i = glyphs.indexOf(item)
+        val p = i + n
+
+        if (i !in glyphs.indices || p !in glyphs.indices) return
+
+        val current = glyphs[i]
+        val next = glyphs[p]
+        
+        glyphs[i] = next
+        glyphs[p] = current
+
+        writeGlyphMappings(glyphs)
     }
 }

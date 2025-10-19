@@ -60,24 +60,35 @@ class GlyphMatrixService : Service() {
             if (glyph !== null) {
                 clearRunnable?.let { mainHandler.removeCallbacks(it) }
                 clearRunnable = null
-    
+
                 animationRunnable?.let { mainHandler.removeCallbacks(it) }
                 animationRunnable = null
 
                 val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
-                val speed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).coerceAtLeast(1L)
 
-                fun clear() {
+                if (preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)) {
+                    val speed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).coerceAtLeast(1L)
+
+                    fun clear() {
+                        try {
+                            glyph = null
+                            glyphMatrixManager?.closeAppMatrix()
+                        } catch (e: Exception) {
+                            Log.e(tag, "Failed to close glyph matrix: $e")
+                        }
+                    }
+
+                    glyph?.let { g ->
+                        hideAnimated(g, speed / 3L, ::clear)
+                    }
+                }
+                else {
                     try {
                         glyph = null
                         glyphMatrixManager?.closeAppMatrix()
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to close glyph matrix: $e")
                     }
-                }
-
-                glyph?.let { g ->
-                    hideAnimated(g, speed / 3L, ::clear)
                 }
             }
         }
@@ -147,7 +158,7 @@ class GlyphMatrixService : Service() {
 
             if (arr.length() > 0) {
                 val random = Random.nextInt(0, arr.length())
-                glyph = BitmapFactory.decodeFile(arr.getJSONObject(random).optString(Constants.GLYPH_GLYPH))
+                glyph = BitmapFactory.decodeFile(arr.getJSONObject(random).optString("glyph"))
             }
         }
 
@@ -170,7 +181,8 @@ class GlyphMatrixService : Service() {
             glyph?.let { g ->
                 showAnimated(g, timeout, speed, ::clear)
             }
-        } else {
+        }
+        else {
             glyph?.let { g ->
                 showSimple(g, timeout, ::clear)
             }
