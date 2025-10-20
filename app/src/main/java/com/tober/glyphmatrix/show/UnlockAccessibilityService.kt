@@ -44,12 +44,13 @@ class UnlockAccessibilityService : AccessibilityService() {
         }
 
         val currentlyInteractive = isScreenInteractive()
+        val eventPkg = event.packageName?.toString()
 
         if (!screenOn && currentlyInteractive) {
             mainHandler.postDelayed({
                 if (isScreenInteractive()) {
                     Log.i(tag, "onScreenOn")
-                    onScreenOn()
+                    onScreenOn(eventPkg)
                 }
             }, 120L)
         }
@@ -73,7 +74,9 @@ class UnlockAccessibilityService : AccessibilityService() {
         return pm?.isInteractive == true
     }
 
-    private fun onScreenOn() {
+    private fun onScreenOn(eventPkg: String?) {
+        if (eventPkg == "com.google.android.dialer") return
+
         val intent = Intent(this, GlyphMatrixService::class.java)
         startService(intent)
     }

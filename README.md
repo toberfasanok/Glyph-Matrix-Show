@@ -9,6 +9,7 @@ This is a tool for the Nothing Phone 3 Glyph Matrix
 ## General
 
 This app displays randomly selected custom glyphs each time you open your phone
+The glyphs will not be displayed when the screen is woken up by an incoming call
 
 ## Usage
 
