@@ -640,7 +640,7 @@ class MainActivity : ComponentActivity() {
 
         val current = glyphs[i]
         val next = glyphs[p]
-        
+
         glyphs[i] = next
         glyphs[p] = current
 
