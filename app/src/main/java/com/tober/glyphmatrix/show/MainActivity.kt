@@ -189,7 +189,7 @@ class MainActivity : ComponentActivity() {
 
                                 Spacer(modifier = Modifier.height(25.dp))
 
-                                Text(text = "1. Allow Restricted Settings:", fontWeight = FontWeight.Bold)
+                                Text(text = "Allow Restricted Settings:", fontWeight = FontWeight.Bold)
                                 Text(text = "App Info -> ⋮ (top right) -> Allow Restricted Settings")
 
                                 Button(
@@ -205,18 +205,20 @@ class MainActivity : ComponentActivity() {
                                     Text(text = "Open App Info")
                                 }
 
-                                Spacer(modifier = Modifier.height(25.dp))
+                                if (!hasAccessibilityServiceAccess) {
+                                    Spacer(modifier = Modifier.height(25.dp))
 
-                                Text(text = "2. Allow Accessibility Service Access:", fontWeight = FontWeight.Bold)
-                                Text(text = "Glyph Matrix Show -> Use Glyph Matrix Show -> Allow")
+                                    Text(text = "Allow Accessibility Service Access:", fontWeight = FontWeight.Bold)
+                                    Text(text = "Glyph Matrix Show -> Use Glyph Matrix Show -> Allow")
 
-                                Button(
-                                    onClick = {
-                                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                                    },
-                                    modifier = Modifier.padding(top = 12.dp)
-                                ) {
-                                    Text(text = "Open Accessibility Service Access Settings")
+                                    Button(
+                                        onClick = {
+                                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                        },
+                                        modifier = Modifier.padding(top = 12.dp)
+                                    ) {
+                                        Text(text = "Open Accessibility Service Access Settings")
+                                    }
                                 }
                             }
                         } else {
@@ -237,7 +239,6 @@ class MainActivity : ComponentActivity() {
                                         onCheckedChange = { checked ->
                                             active = checked
                                             preferences.edit { putBoolean(Constants.PREFERENCES_ACTIVE, checked) }
-                                            broadcastPreferencesUpdate()
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -271,7 +272,6 @@ class MainActivity : ComponentActivity() {
                                     IconButton(onClick = {
                                         val timeout = glyphTimeout.toLongOrNull() ?: 5L
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, timeout) }
-                                        broadcastPreferencesUpdate()
                                         toast("Timeout saved")
                                     }) {
                                         Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
@@ -280,7 +280,6 @@ class MainActivity : ComponentActivity() {
                                     IconButton(onClick = {
                                         glyphTimeout = "5"
                                         preferences.edit { putLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L) }
-                                        broadcastPreferencesUpdate()
                                         toast("Timeout reset")
                                     }) {
                                         Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Reset")
@@ -305,7 +304,6 @@ class MainActivity : ComponentActivity() {
                                         onCheckedChange = { checked ->
                                             animateGlyphs = checked
                                             preferences.edit { putBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, checked) }
-                                            broadcastPreferencesUpdate()
                                         },
                                         colors = SwitchDefaults.colors(
                                             checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
@@ -336,7 +334,6 @@ class MainActivity : ComponentActivity() {
                                         IconButton(onClick = {
                                             val animateSpeed = animateSpeed.toLongOrNull() ?: 10L
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, animateSpeed) }
-                                            broadcastPreferencesUpdate()
                                             toast("Animation speed saved")
                                         }) {
                                             Icon(imageVector = Icons.Filled.Save, contentDescription = "Save")
@@ -345,7 +342,6 @@ class MainActivity : ComponentActivity() {
                                         IconButton(onClick = {
                                             animateSpeed = "10"
                                             preferences.edit { putLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L) }
-                                            broadcastPreferencesUpdate()
                                             toast("Animation speed reset")
                                         }) {
                                             Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Reset")
@@ -498,30 +494,6 @@ class MainActivity : ComponentActivity() {
         hasAccessibilityServiceAccess = getAccessibilityServiceAccess()
     }
 
-    private fun broadcastPreferencesUpdate() {
-        val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
-
-        val active = preferences.getBoolean(Constants.PREFERENCES_ACTIVE, true)
-
-        val glyphTimeout = preferences.getLong(Constants.PREFERENCES_GLYPH_TIMEOUT, 5L)
-        val animateGlyphs = preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)
-        val animateSpeed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L)
-
-        val glyphs = preferences.getString(Constants.PREFERENCES_GLYPHS, null)
-
-        val intent = Intent(Constants.ACTION_ON_PREFERENCES_UPDATE).apply {
-            putExtra(Constants.PREFERENCES_ACTIVE, active)
-
-            putExtra(Constants.PREFERENCES_GLYPH_TIMEOUT, glyphTimeout)
-            putExtra(Constants.PREFERENCES_ANIMATE_GLYPHS, animateGlyphs)
-            putExtra(Constants.PREFERENCES_ANIMATE_SPEED, animateSpeed)
-
-            putExtra(Constants.PREFERENCES_GLYPHS, glyphs)
-        }
-
-        sendBroadcast(intent)
-    }
-
     private fun readGlyphMappings(): MutableList<Glyph> {
         val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
         val raw = preferences.getString(Constants.PREFERENCES_GLYPHS, null) ?: return mutableListOf()
@@ -549,8 +521,6 @@ class MainActivity : ComponentActivity() {
 
         val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
         preferences.edit { putString(Constants.PREFERENCES_GLYPHS, arr.toString()) }
-
-        broadcastPreferencesUpdate()
     }
 
     private fun toast(message: String) {

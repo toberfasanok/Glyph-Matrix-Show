@@ -64,11 +64,7 @@ class GlyphMatrixService : Service() {
                 animationRunnable?.let { mainHandler.removeCallbacks(it) }
                 animationRunnable = null
 
-                val preferences = getSharedPreferences(Constants.PREFERENCES_NAME, MODE_PRIVATE)
-
                 if (preferences.getBoolean(Constants.PREFERENCES_ANIMATE_GLYPHS, true)) {
-                    val speed = preferences.getLong(Constants.PREFERENCES_ANIMATE_SPEED, 10L).coerceAtLeast(1L)
-
                     fun clear() {
                         try {
                             glyph = null
